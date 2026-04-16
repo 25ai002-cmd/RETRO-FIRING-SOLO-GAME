@@ -3,304 +3,403 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spec-Ops: Tactical Mobile</title>
+    <title>Spec-Ops: Strike Protocol</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; touch-action: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; touch-action: none; color: #00ff41; }
         .overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: rgba(0, 15, 0, 0.98); z-index: 100; color: #00ff41; text-align: center;
+            background: rgba(0, 5, 0, 0.95); z-index: 100; text-align: center;
         }
         #hud {
             position: absolute; top: 20px; left: 20px; right: 20px;
-            color: #00ff41; pointer-events: none; z-index: 10;
-            display: none; justify-content: space-between;
-        }
-        .pause-btn {
-            pointer-events: auto; background: rgba(0, 255, 65, 0.2);
-            border: 1px solid #00ff41; color: #00ff41; padding: 8px 15px;
-            cursor: pointer; font-family: 'Courier New', monospace; font-size: 14px;
-        }
-        .input-group { margin: 15px 0; }
-        input[type="text"] {
-            background: rgba(0, 255, 65, 0.1); border: 2px solid #00ff41;
-            color: #00ff41; padding: 10px; font-family: 'Courier New', monospace;
-            font-size: 18px; text-align: center; outline: none; width: 200px;
+            pointer-events: none; z-index: 10; display: none; justify-content: space-between;
         }
         .btn {
             background: none; border: 2px solid #00ff41; color: #00ff41;
-            padding: 15px 30px; font-size: 20px; cursor: pointer;
-            font-family: 'Courier New', monospace; font-weight: bold; margin-top: 15px;
+            padding: 12px 25px; font-size: 18px; cursor: pointer;
+            font-family: 'Courier New', monospace; font-weight: bold; margin-top: 10px;
         }
         #scanlines {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
-            background-size: 100% 4px; z-index: 200; pointer-events: none;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
+            background-size: 100% 4px; z-index: 200; pointer-events: none; opacity: 0.6;
+        }
+        #pause-btn {
+            position: absolute; top: 20px; right: 20px; width: 40px; height: 40px;
+            border: 2px solid #00ff41; display: none; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 150; pointer-events: auto; background: rgba(0,0,0,0.5);
         }
         .history-container {
-            margin-top: 20px; padding: 10px; border-top: 1px solid #00ff41;
-            width: 80%; max-width: 300px; font-size: 14px;
+            margin-top: 15px; font-size: 11px; border: 1px solid #004411;
+            padding: 10px; width: 260px; background: rgba(0, 15, 0, 0.8);
         }
-        .history-item {
-            display: flex; justify-content: space-between; margin: 5px 0;
-            opacity: 0.8;
+        .history-item { display: flex; justify-content: space-between; border-bottom: 1px solid #003311; padding: 4px 0; }
+        .xp-bar-bg { width: 260px; height: 6px; background: rgba(0,255,65,0.1); border: 1px solid #00ff41; margin: 10px 0; }
+        #xp-bar-fill { width: 0%; height: 100%; background: #00ff41; box-shadow: 0 0 10px #00ff41; }
+        input[type="text"] {
+            background:rgba(0,255,65,0.1); border:1px solid #00ff41; color:#00ff41; 
+            padding:8px; text-align:center; font-family:inherit; outline: none;
         }
     </style>
 </head>
-<body oncontextmenu="return false;">
+<body oncontextmenu="return false;" onload="initSystem()">
 
     <div id="scanlines"></div>
 
     <div id="start-interface" class="overlay">
-        <h1>SPEC-OPS: MOBILE</h1>
-        <div class="input-group">
-            <input type="text" id="username" placeholder="OPERATIVE ID" maxlength="12">
+        <h1 style="letter-spacing: 8px; text-shadow: 0 0 10px #00ff41;">SPEC-OPS</h1>
+        <input type="text" id="username" placeholder="OPERATIVE ID" maxlength="12">
+        <div class="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+        <div id="rank-display" style="font-size: 11px;">RANK: RECRUIT</div>
+        <div class="history-container">
+            <div style="font-weight: bold; color: #00ff41; border-bottom: 1px solid #00ff41; margin-bottom: 5px;">MISSION HISTORY</div>
+            <div id="score-history-list"></div>
         </div>
         <button class="btn" onclick="startGame()">INITIALIZE</button>
     </div>
 
     <div id="hud">
-        <div>
-            ID: <span id="id-display"></span><br>
-            LIVES: <span id="lives-display">❤️❤️❤️</span><br>
-            INTEL: <span id="score-display">00000</span>
-        </div>
-        <button class="pause-btn" id="p-btn" onclick="togglePause()">PAUSE</button>
+        <div>ID: <span id="id-display" style="text-shadow: 0 0 5px #00ff41;"></span><br>HP: <span id="lives-display">❤️❤️❤️</span></div>
+        <div style="text-align: right; padding-right: 50px;">INTEL: <span id="score-display">00000</span></div>
+    </div>
+
+    <div id="pause-btn" onclick="togglePause()">
+        <div id="pause-icon" style="width: 15px; height: 20px; border-left: 5px solid #00ff41; border-right: 5px solid #00ff41;"></div>
+    </div>
+
+    <div id="pause-interface" class="overlay" style="display: none; background: rgba(0, 10, 0, 0.8);">
+        <h1 style="letter-spacing: 5px; color: #00ff41;">SYSTEM HALTED</h1>
+        <button class="btn" onclick="togglePause()">RESUME</button>
     </div>
 
     <div id="death-interface" class="overlay" style="display: none;">
-        <h1 style="color: #ff4444;">MISSION FAILED</h1>
-        <div id="rank-title" style="color:#ffcc00; margin-bottom: 10px;"></div>
+        <h1 id="death-name-display" style="color: #ff4444; text-shadow: 0 0 10px #ff0000; letter-spacing: 3px;"></h1>
         <p id="final-stats"></p>
-        
-        <div class="history-container">
-            <div style="margin-bottom: 10px; text-decoration: underline;">RECENT MISSIONS</div>
-            <div id="history-list"></div>
-        </div>
-
         <button class="btn" onclick="location.reload()">REDEPLOY</button>
     </div>
 
 <script>
-let gameActive = false, score = 0, lives = 3, threatLevel = 1;
-let player, gun, enemies, bullets, keys, audioCtx;
-let joystickBase, joystickThumb, joystickActive = false;
-let fireButton, isFiring = false;
+const AudioEngine = {
+    ctx: null,
+    init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.startBGM(); },
+    playFire() {
+        if (!this.ctx || isPaused) return;
+        const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.type = 'square'; o.frequency.setValueAtTime(850, this.ctx.currentTime);
+        o.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.1);
+        g.gain.setValueAtTime(0.02, this.ctx.currentTime);
+        o.connect(g); g.connect(this.ctx.destination);
+        o.start(); o.stop(this.ctx.currentTime + 0.1);
+    },
+    playHit() {
+        if (!this.ctx) return;
+        const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(120, this.ctx.currentTime);
+        g.gain.setValueAtTime(0.05, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.2);
+        o.connect(g); g.connect(this.ctx.destination);
+        o.start(); o.stop(this.ctx.currentTime + 0.2);
+    },
+    startBGM() {
+        const beat = () => {
+            if(!gameActive || isPaused) { setTimeout(beat, 500); return; }
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.frequency.setValueAtTime(45, this.ctx.currentTime);
+            g.gain.setValueAtTime(0.02, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+            o.connect(g); g.connect(this.ctx.destination);
+            o.start(); o.stop(this.ctx.currentTime + 0.5);
+            setTimeout(beat, Math.max(200, 700 - (enemySpeed / 2)));
+        };
+        beat();
+    }
+};
+
+let gameActive = false, isPaused = false, score = 0, lives = 3;
+let player, playerGlow, gun, muzzleFlash, enemies, bullets, enemyBullets, keys;
+let joystickBase, joystickThumb, joystickActive = false, joystickPointer = null;
+let isFiring = false, playerColor = 0x00ff41, explosionEmitter;
+let enemySpeed = 110, playerSpeed = 260;
+
+let lastComplimentThreshold = 0;
+let complimentCount = 0;
 
 const config = {
     type: Phaser.AUTO,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    physics: { 
-        default: 'arcade',
-        arcade: {
-            fps: 60,
-            forceLowPriority: true 
-        }
-    },
+    width: window.innerWidth, height: window.innerHeight,
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
     scene: { preload, create, update }
 };
 
 const phaserGame = new Phaser.Game(config);
 
-function playSound(type) {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain); 
-    gain.connect(audioCtx.destination);
+function initSystem() {
+    const total = parseInt(localStorage.getItem('specOpsTotalIntel') || '0');
+    const history = JSON.parse(localStorage.getItem('specOpsHistory') || '[]');
+    const historyList = document.getElementById('score-history-list');
+    historyList.innerHTML = history.length ? history.map(h => `<div class="history-item"><span>${h.name}</span><span>${h.score}</span></div>`).join('') : "NO RECORDS";
     
-    const now = audioCtx.currentTime;
-    if (type === 'fire') {
-        osc.frequency.setValueAtTime(800, now);
-        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
-        gain.gain.setValueAtTime(0.04, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now); osc.stop(now + 0.1);
-    } else {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
-    }
+    const RANKS = [{ min: 0, color: 0x00ff41, name: "RECRUIT" }, { min: 5000, color: 0x00ffff, name: "AGENT" }, { min: 15000, color: 0xbc13fe, name: "ELITE" }];
+    let cur = RANKS.findLast(r => total >= r.min) || RANKS[0];
+    playerColor = cur.color;
+    document.getElementById('rank-display').innerText = `RANK: ${cur.name} | TOTAL: ${total}`;
+    document.getElementById('rank-display').style.color = '#' + cur.color.toString(16).padStart(6, '0');
+    let nxt = RANKS[RANKS.indexOf(cur) + 1] || { min: total + 1000 };
+    document.getElementById('xp-bar-fill').style.width = Math.min(100, ((total - cur.min) / (nxt.min - cur.min)) * 100) + "%";
 }
 
 function preload() {
     let g = this.make.graphics({ x: 0, y: 0, add: false });
-    g.lineStyle(1, 0x00ff41, 0.2).strokeRect(0, 0, 64, 64);
-    g.generateTexture('grid', 64, 64);
-    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 20, 20);
-    g.generateTexture('p', 20, 20);
-    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 18, 6);
-    g.generateTexture('g', 18, 6);
-    g.clear().fillStyle(0xff4444).fillRect(0, 0, 22, 22);
-    g.generateTexture('e', 22, 22);
-    g.clear().fillStyle(0xffff00).fillRect(0, 0, 12, 3);
-    g.generateTexture('b', 12, 3);
-    
-    g.clear().lineStyle(2, 0x00ff41, 0.4).strokeCircle(50, 50, 50);
-    g.generateTexture('jBase', 100, 100);
-    g.clear().fillStyle(0x00ff41, 0.4).fillCircle(25, 25, 25);
-    g.generateTexture('jThumb', 50, 50);
-    g.clear().lineStyle(3, 0x00ff41, 0.6).strokeCircle(40, 40, 40);
-    g.fillStyle(0x00ff41, 0.2).fillCircle(40, 40, 40);
-    g.generateTexture('fireBtn', 80, 80);
+    g.lineStyle(1, 0xffffff, 0.1).strokeRect(0, 0, 64, 64); g.generateTexture('grid', 64, 64);
+    g.clear().fillStyle(0xffffff).fillRect(0, 0, 24, 24); g.generateTexture('p', 24, 24);
+    g.clear().fillStyle(0xffffff).fillRect(0, 0, 22, 8); g.generateTexture('g', 22, 8);
+    g.clear().fillStyle(0xffffff).fillRect(0, 0, 22, 22); g.generateTexture('e', 22, 22);
+    g.clear().fillStyle(0xffffff).fillRect(0, 0, 12, 4); g.generateTexture('b', 12, 4);
+    g.clear().fillStyle(0xffffff).fillRect(0, 0, 4, 4); g.generateTexture('part', 4, 4);
+    g.clear().fillStyle(0xffffff, 1);
+    for(let i=0; i<5; i++) { g.fillCircle(20, 20, 20 - i*4); g.alpha -= 0.2; }
+    g.generateTexture('glow', 40, 40);
+    g.clear().lineStyle(2, 0xffffff, 0.4).strokeCircle(50, 50, 50); g.generateTexture('jBase', 100, 100);
+    g.clear().fillStyle(0xffffff, 0.4).fillCircle(25, 25, 25); g.generateTexture('jThumb', 50, 50);
 }
 
 function create() {
-    this.add.tileSprite(0,0,5000,5000,'grid').setOrigin(0);
-    player = this.physics.add.sprite(window.innerWidth/2, window.innerHeight/2, 'p').setVisible(false);
-    player.setDamping(true).setDrag(0.05).setMaxVelocity(400).setCollideWorldBounds(true);
-    
-    gun = this.add.image(0,0,'g').setOrigin(0, 0.5).setVisible(false);
-    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 50 });
-    enemies = this.physics.add.group();
-    keys = this.input.keyboard.addKeys('W,A,S,D');
+    this.add.tileSprite(0, 0, window.innerWidth, window.innerHeight, 'grid').setOrigin(0).setTint(0x001100);
+    explosionEmitter = this.add.particles(0, 0, 'part', { lifespan: 400, speed: { min: 100, max: 200 }, scale: { start: 1.5, end: 0 }, blendMode: 'ADD', emitting: false });
 
-    joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setDepth(100);
-    joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setDepth(101);
-    
-    fireButton = this.add.image(window.innerWidth - 80, window.innerHeight - 80, 'fireBtn')
-        .setInteractive().setVisible(false).setDepth(100).setScrollFactor(0);
+    playerGlow = this.add.image(0, 0, 'glow').setTint(playerColor).setBlendMode('ADD').setScale(1.5).setAlpha(0.6);
+    player = this.physics.add.sprite(window.innerWidth/2, window.innerHeight/2, 'p').setTint(playerColor).setDepth(5).setCollideWorldBounds(true);
+    gun = this.add.image(player.x, player.y, 'g').setOrigin(0, 0.5).setTint(playerColor).setDepth(6);
+    muzzleFlash = this.add.image(0, 0, 'glow').setTint(0xffffff).setBlendMode('ADD').setAlpha(0).setScale(0.8).setDepth(7);
+
+    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 30 });
+    enemyBullets = this.physics.add.group({ defaultKey: 'b', maxSize: 15 });
+    enemies = this.physics.add.group();
+    keys = this.input.keyboard.addKeys('W,A,S,D,P');
+
+    joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setDepth(100).setTint(playerColor);
+    joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setDepth(101).setTint(playerColor);
 
     this.input.addPointer(2);
-
-    this.input.on('pointerdown', (pointer) => {
-        if (pointer.x < window.innerWidth / 2) {
-            joystickActive = true;
-            joystickBase.setPosition(pointer.x, pointer.y).setVisible(true);
-            joystickThumb.setPosition(pointer.x, pointer.y).setVisible(true);
-        }
+    this.input.on('pointerdown', (p) => {
+        if (!gameActive || isPaused) return;
+        if (p.x < window.innerWidth * 0.4) {
+            joystickActive = true; joystickPointer = p;
+            joystickBase.setPosition(p.x, p.y).setVisible(true);
+            joystickThumb.setPosition(p.x, p.y).setVisible(true);
+        } else isFiring = true;
+    });
+    this.input.on('pointerup', (p) => {
+        if (joystickPointer && p.id === joystickPointer.id) {
+            joystickActive = false; joystickPointer = null;
+            joystickBase.setVisible(false); joystickThumb.setVisible(false);
+            if(player.active) player.setVelocity(0);
+        } else isFiring = false;
     });
 
-    fireButton.on('pointerdown', () => { isFiring = true; fireButton.setAlpha(0.8); });
-    fireButton.on('pointerup', () => { isFiring = false; fireButton.setAlpha(1); });
-    fireButton.on('pointerout', () => { isFiring = false; fireButton.setAlpha(1); });
-
-    this.input.on('pointerup', (pointer) => {
-        if (pointer.x < window.innerWidth / 2) {
-            joystickActive = false;
-            joystickBase.setVisible(false);
-            joystickThumb.setVisible(false);
-            player.setAcceleration(0);
-        }
+    this.physics.add.overlap(bullets, enemies, (bul, nmy) => {
+        if (!nmy.active) return;
+        nmy.hp--; 
+        bullets.killAndHide(bul); bul.body.enable = false;
+        if (nmy.hp <= 0) { handleKill(this, nmy); nmy.destroy(); }
     });
 
-    this.physics.add.overlap(bullets, enemies, (b, e) => {
-        bullets.killAndHide(b);
-        b.body.stop();
-        e.destroy();
-        playSound('hit');
-        score += 100;
-        document.getElementById('score-display').innerText = score.toString().padStart(5, '0');
-        if(score % 500 === 0) threatLevel++;
-    });
-
-    this.physics.add.collider(player, enemies, (p, e) => {
-        e.destroy(); lives--;
-        this.cameras.main.shake(200, 0.02);
-        document.getElementById('lives-display').innerText = "❤️".repeat(lives) || "KIA";
+    const onHit = (p, obj) => {
+        if (!p.active || isPaused) return;
+        lives--; 
+        this.cameras.main.shake(200, 0.01);
+        const name = (document.getElementById('username').value || "OPERATIVE").toUpperCase();
+        document.getElementById('lives-display').innerText = "❤️".repeat(lives) || name;
         if (lives <= 0) endGame();
-    });
+    };
+    this.physics.add.overlap(player, enemies, onHit);
+    this.physics.add.overlap(player, enemyBullets, onHit);
+    
+    this.input.keyboard.on('keydown-P', () => { if(gameActive) togglePause(); });
     this.physics.world.pause();
 }
 
-function update(time) {
-    if (!gameActive || this.physics.world.isPaused) return;
+function handleKill(scene, enemy) {
+    explosionEmitter.setParticleTint(enemy.tintTopLeft);
+    explosionEmitter.explode(15, enemy.x, enemy.y);
+    scene.cameras.main.shake(100, 0.005);
+    AudioEngine.playHit();
+    score += enemy.points;
+    document.getElementById('score-display').innerText = score.toString().padStart(5, '0');
 
-    if (joystickActive) {
-        let pointer = this.input.pointers.find(p => p.isDown && p.x < window.innerWidth / 2);
-        if (pointer) {
-            const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
-            const dist = Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
-            const moveDist = Math.min(dist, 50);
-            joystickThumb.setPosition(joystickBase.x + Math.cos(angle) * moveDist, joystickBase.y + Math.sin(angle) * moveDist);
-            player.setAcceleration(Math.cos(angle) * 2000, Math.sin(angle) * 2000);
-        }
-    } else {
-        let accelX = 0, accelY = 0;
-        if (keys.W.isDown) accelY = -2000; else if (keys.S.isDown) accelY = 2000;
-        if (keys.A.isDown) accelX = -2000; else if (keys.D.isDown) accelX = 2000;
-        player.setAcceleration(accelX, accelY);
+    if (score >= lastComplimentThreshold + 500) {
+        complimentCount++;
+        showStrikeText(scene, complimentCount);
+        lastComplimentThreshold = Math.floor(score / 500) * 500;
     }
-
-    let nearest = this.physics.closest(player, enemies.getChildren());
-    let targetAngle = player.rotation;
-    if (nearest) {
-        targetAngle = Phaser.Math.Angle.Between(player.x, player.y, nearest.x, nearest.y);
-        player.setRotation(targetAngle);
-    }
-    gun.setPosition(player.x, player.y).setRotation(targetAngle);
-
-    if ((isFiring || this.input.activePointer.leftButtonDown()) && time > (this.lastFired || 0)) {
-        let b = bullets.get(player.x, player.y);
-        if (b) {
-            b.setActive(true).setVisible(true).body.reset(player.x, player.y);
-            b.setRotation(targetAngle);
-            this.physics.velocityFromRotation(targetAngle, 1800, b.body.velocity);
-            this.lastFired = time + 100;
-            playSound('fire');
-        }
-    }
-
-    bullets.getChildren().forEach(b => {
-        if (b.active && (b.x < -50 || b.x > window.innerWidth + 50 || b.y < -50 || b.y > window.innerHeight + 50)) {
-            bullets.killAndHide(b);
-            b.body.stop();
-        }
-    });
-
-    if (enemies.countActive() < (5 + threatLevel)) {
-        let x = Phaser.Math.Between(0, window.innerWidth), y = Phaser.Math.Between(0, window.innerHeight);
-        if (Phaser.Math.Distance.Between(x, y, player.x, player.y) > 300) enemies.create(x, y, 'e');
-    }
-    enemies.getChildren().forEach(e => this.physics.moveToObject(e, player, 140 + (threatLevel * 10)));
 }
 
-function startGame() {
-    const nameInput = document.getElementById('username').value.trim();
-    const name = (nameInput || "OPERATIVE").toUpperCase();
-    document.getElementById('id-display').innerText = name;
-    gameActive = true;
-    document.getElementById('start-interface').style.display = 'none';
-    document.getElementById('hud').style.display = 'flex';
-    player.setVisible(true); gun.setVisible(true); fireButton.setVisible(true);
-    phaserGame.scene.scenes[0].physics.world.resume();
+function showStrikeText(scene, index) {
+    // 20 Tiered compliments
+    const strikes = [
+        "", // index 0
+        { t: "DOUBLE KILL", c: "#00ff41" },    // 1
+        { t: "TRIPLE KILL", c: "#00ff41" },    // 2
+        { t: "QUAD KILL", c: "#00ffff" },      // 3
+        { t: "MEGA KILL", c: "#00ffff" },      // 4
+        { t: "ULTRA KILL", c: "#0088ff" },     // 5
+        { t: "MONSTER KILL", c: "#0088ff" },   // 6
+        { t: "LUDICROUS KILL", c: "#bc13fe" }, // 7
+        { t: "HOLY SHIT", c: "#bc13fe" },      // 8
+        { t: "UNSTOPPABLE", c: "#ff00ff" },    // 9
+        { t: "DOMINATING", c: "#ff00ff" },     // 10
+        // FINAL 10 - ALL RED
+        { t: "GOD-LIKE", c: "#ff0000" },       // 11
+        { t: "WICKED SICK", c: "#ff0000" },    // 12
+        { t: "RAMPAGE", c: "#ff0000" },        // 13
+        { t: "TERMINATED", c: "#ff0000" },     // 14
+        { t: "DEATH INCARNATE", c: "#ff0000" },// 15
+        { t: "BEYOND GODLIKE", c: "#ff0000" }, // 16
+        { t: "ANNIHILATION", c: "#ff0000" },   // 17
+        { t: "EXECUTIONER", c: "#ff0000" },    // 18
+        { t: "APOCALYPSE", c: "#ff0000" },     // 19
+        { t: "GOD OF WAR", c: "#ff0000" }      // 20
+    ];
+    
+    let s;
+    if (index <= 20) {
+        s = strikes[index];
+    } else {
+        // Repeated Loop for the last 10 Red Tiers
+        const loopIndex = 11 + ((index - 21) % 10);
+        s = strikes[loopIndex];
+    }
+
+    const shakePower = Math.min(0.025, index * 0.0012);
+    scene.cameras.main.shake(300, shakePower);
+
+    const txt = scene.add.text(window.innerWidth/2, window.innerHeight * 0.3, s.t, { 
+        fontFamily: 'Impact, sans-serif', 
+        fontSize: '64px', 
+        fontStyle: 'italic',
+        color: s.c, 
+        stroke: '#000', 
+        strokeThickness: 10,
+        shadow: { offsetX: 0, offsetY: 0, color: s.c, blur: 30, stroke: true, fill: true }
+    }).setOrigin(0.5).setDepth(200).setAlpha(0).setScale(4);
+
+    scene.tweens.add({ 
+        targets: txt, 
+        alpha: 1, 
+        scale: 1, 
+        y: window.innerHeight * 0.22, 
+        duration: 250, 
+        ease: 'Back.Out', 
+        onComplete: () => { 
+            scene.tweens.add({ 
+                targets: txt, 
+                alpha: 0, 
+                scale: 2.5,
+                y: window.innerHeight * 0.05, 
+                delay: 850, 
+                duration: 400, 
+                onComplete: () => txt.destroy() 
+            }); 
+        } 
+    });
 }
 
 function togglePause() {
+    if (!gameActive) return;
+    isPaused = !isPaused;
     const scene = phaserGame.scene.scenes[0];
-    const isPaused = scene.physics.world.isPaused;
-    scene.physics.world.isPaused = !isPaused;
-    document.getElementById('p-btn').innerText = isPaused ? "PAUSE" : "RESUME";
+    if (isPaused) {
+        scene.physics.world.pause();
+        document.getElementById('pause-interface').style.display = 'flex';
+        document.getElementById('pause-icon').style.cssText = 'width: 0; height: 0; border-left: 15px solid #00ff41; border-top: 10px solid transparent; border-bottom: 10px solid transparent;';
+    } else {
+        scene.physics.world.resume();
+        document.getElementById('pause-interface').style.display = 'none';
+        document.getElementById('pause-icon').style.cssText = 'width: 15px; height: 20px; border-left: 5px solid #00ff41; border-right: 5px solid #00ff41;';
+    }
 }
 
-function updateScoreboard(newName, newScore) {
-    let history = JSON.parse(localStorage.getItem('specOpsScores') || '[]');
-    history.unshift({ name: newName, score: newScore });
-    if (history.length > 5) history = history.slice(0, 5);
-    localStorage.setItem('specOpsScores', JSON.stringify(history));
-    
-    const listElement = document.getElementById('history-list');
-    listElement.innerHTML = history.map(entry => 
-        `<div class="history-item"><span>${entry.name}</span> <span>${entry.score}</span></div>`
-    ).join('');
+function update(time) {
+    if (!gameActive || isPaused) return;
+
+    let vx = 0, vy = 0;
+    if (keys.W.isDown) vy = -playerSpeed; else if (keys.S.isDown) vy = playerSpeed;
+    if (keys.A.isDown) vx = -playerSpeed; else if (keys.D.isDown) vx = playerSpeed;
+
+    if (joystickActive && joystickPointer) {
+        const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, joystickPointer.x, joystickPointer.y);
+        const dist = Math.min(Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, joystickPointer.x, joystickPointer.y), 40);
+        joystickThumb.setPosition(joystickBase.x + Math.cos(angle) * dist, joystickBase.y + Math.sin(angle) * dist);
+        vx = Math.cos(angle) * playerSpeed; vy = Math.sin(angle) * playerSpeed;
+    }
+    player.setVelocity(vx, vy);
+    playerGlow.setPosition(player.x, player.y);
+    gun.setPosition(player.x, player.y);
+
+    let target = this.physics.closest(player, enemies.getChildren());
+    let gunAngle = target ? Phaser.Math.Angle.Between(player.x, player.y, target.x, target.y) : gun.rotation;
+    gun.setRotation(gunAngle);
+
+    if (muzzleFlash.alpha > 0) {
+        muzzleFlash.setPosition(player.x + Math.cos(gunAngle) * 25, player.y + Math.sin(gunAngle) * 25);
+        muzzleFlash.setRotation(gunAngle);
+    }
+
+    if (isFiring && time > (this.lastFired || 0)) {
+        let b = bullets.get(player.x, player.y);
+        if (b) { b.setActive(true).setVisible(true).body.enable = true; b.setTint(playerColor).setBlendMode('ADD'); this.physics.velocityFromRotation(gun.rotation, 1400, b.body.velocity); muzzleFlash.setAlpha(1); this.time.delayedCall(50, () => { muzzleFlash.setAlpha(0); }); AudioEngine.playFire(); this.lastFired = time + 140; }
+    }
+
+    enemies.getChildren().forEach(e => {
+        if (!e.active) return;
+        if (e.type === 'sniper' && Phaser.Math.Distance.Between(e.x, e.y, player.x, player.y) < 350) {
+            e.setVelocity(0);
+            if (time > e.lastShot) {
+                let eb = enemyBullets.get(e.x, e.y);
+                if (eb) { eb.setActive(true).setVisible(true).body.enable = true; eb.setTint(0xff00ff); this.physics.moveToObject(eb, player, 400); e.lastShot = time + 2000; }
+            }
+        } else this.physics.moveToObject(e, player, enemySpeed * (e.type === 'brute' ? 0.5 : (e.type === 'scout' ? 1.8 : 1)));
+    });
+
+    if (enemies.countActive() < (4 + Math.floor(score / 2000))) {
+        let x = Phaser.Math.Between(0, window.innerWidth), y = Phaser.Math.Between(0, window.innerHeight);
+        if (Phaser.Math.Distance.Between(x, y, player.x, player.y) > 300) {
+            let n = enemies.create(x, y, 'e'), r = Math.random();
+            if (score > 5000 && r > 0.85) { n.type = 'scout'; n.setScale(0.8); n.hp = 1; n.points = 250; n.baseColor = 0x00ffff; }
+            else if (score > 2000 && r > 0.70) { n.type = 'brute'; n.setScale(2); n.hp = 4; n.points = 400; n.baseColor = 0xff8800; }
+            else if (score > 3500 && r > 0.60) { n.type = 'sniper'; n.setScale(1.2); n.hp = 2; n.points = 300; n.baseColor = 0xff00ff; n.lastShot = 0; }
+            else { n.type = 'grunt'; n.hp = 1; n.points = 100; n.baseColor = 0xff4444; }
+            n.setTint(n.baseColor);
+        }
+    }
+
+    [bullets, enemyBullets].forEach(g => g.getChildren().forEach(b => { if (b.active && (b.x < 0 || b.x > window.innerWidth || b.y < 0 || b.y > window.innerHeight)) { g.killAndHide(b); b.body.enable = false; } }));
+}
+
+function startGame() {
+    AudioEngine.init(); gameActive = true;
+    const name = (document.getElementById('username').value || "OPERATIVE").toUpperCase();
+    document.getElementById('start-interface').style.display = 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('pause-btn').style.display = 'flex';
+    document.getElementById('id-display').innerText = name;
+    phaserGame.scene.scenes[0].physics.world.resume();
 }
 
 function endGame() {
     gameActive = false;
-    const name = document.getElementById('id-display').innerText;
+    const name = (document.getElementById('username').value || "OPERATIVE").toUpperCase();
+    let history = JSON.parse(localStorage.getItem('specOpsHistory') || '[]');
+    history.unshift({ name, score });
+    localStorage.setItem('specOpsHistory', JSON.stringify(history.slice(0, 5)));
+    localStorage.setItem('specOpsTotalIntel', parseInt(localStorage.getItem('specOpsTotalIntel') || '0') + score);
     document.getElementById('hud').style.display = 'none';
-    fireButton.setVisible(false);
+    document.getElementById('pause-btn').style.display = 'none';
+    document.getElementById('death-name-display').innerText = name;
+    document.getElementById('final-stats').innerText = `INTEL: ${score}`;
     document.getElementById('death-interface').style.display = 'flex';
-    document.getElementById('rank-title').innerText = score > 3000 ? "RANK: APEX" : "RANK: RECRUIT";
-    document.getElementById('final-stats').innerText = `SCORE: ${score}`;
-    
-    updateScoreboard(name, score);
     phaserGame.scene.scenes[0].physics.world.pause();
 }
 </script>
