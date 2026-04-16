@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spec-Ops: Manual Tactical</title>
+    <title>Spec-Ops: Tactical History</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; touch-action: none; }
@@ -22,6 +22,11 @@
             border: 1px solid #00ff41; color: #00ff41; padding: 8px 15px;
             cursor: pointer; font-family: 'Courier New', monospace; font-size: 14px;
         }
+        .scoreboard {
+            margin-top: 15px; border: 1px solid rgba(0, 255, 65, 0.3);
+            padding: 10px; width: 85%; max-width: 400px; background: rgba(0, 20, 0, 0.5);
+        }
+        .score-row { display: flex; justify-content: space-between; font-size: 12px; margin: 4px 0; border-bottom: 1px solid rgba(0,255,65,0.1); }
         .btn {
             background: none; border: 2px solid #00ff41; color: #00ff41;
             padding: 15px 30px; font-size: 20px; cursor: pointer;
@@ -39,19 +44,30 @@
     <div id="scanlines"></div>
 
     <div id="start-interface" class="overlay">
-        <h1>SPEC-OPS: MANUAL</h1>
-        <input type="text" id="username" placeholder="OPERATIVE ID" style="background:rgba(0,255,65,0.1); border:2px solid #00ff41; color:#00ff41; padding:10px; text-align:center;" maxlength="12">
+        <h1>SPEC-OPS: RANKED</h1>
+        <input type="text" id="username" placeholder="OPERATIVE ID" style="background:rgba(0,255,65,0.1); border:2px solid #00ff41; color:#00ff41; padding:10px; text-align:center; outline:none;" maxlength="12">
         <button class="btn" onclick="startGame()">INITIALIZE</button>
+        
+        <div class="scoreboard">
+            <div style="text-decoration: underline; margin-bottom: 8px; font-size: 14px;">PREVIOUS DEPLOYMENTS</div>
+            <div id="start-scores"></div>
+        </div>
     </div>
 
     <div id="hud">
-        <div>ID: <span id="id-display"></span> | LIVES: <span id="lives-display">❤️❤️❤️</span> | INTEL: <span id="score-display">00000</span></div>
+        <div>ID: <span id="id-display"></span> | LIVES: <span id="lives-display">❤️❤️❤️</span> | SCORE: <span id="score-display">00000</span></div>
         <button class="pause-btn" id="p-btn" onclick="togglePause()">PAUSE</button>
     </div>
 
     <div id="death-interface" class="overlay" style="display: none;">
-        <h1 style="color: #ff4444;">MISSION FAILED</h1>
-        <p id="final-stats"></p>
+        <h1 style="color: #ff4444; margin-bottom: 5px;">OPERATIVE KIA</h1>
+        <div id="rank-title" style="color:#ffcc00; font-size: 24px; margin-bottom: 10px;"></div>
+        <p id="final-stats" style="margin: 0;"></p>
+        
+        <div class="scoreboard">
+            <div style="text-decoration: underline; margin-bottom: 8px; font-size: 14px;">MISSION HISTORY</div>
+            <div id="end-scores"></div>
+        </div>
         <button class="btn" onclick="location.reload()">REDEPLOY</button>
     </div>
 
@@ -67,13 +83,46 @@ const config = {
 };
 const phaserGame = new Phaser.Game(config);
 
+// --- Score & History Logic ---
+function getRankTitle(s) {
+    if (s >= 5000) return "APEX PREDATOR";
+    if (s >= 2000) return "ELITE VANGUARD";
+    if (s >= 500)  return "FIELD AGENT";
+    return "GREEN RECRUIT";
+}
+
+function saveScore(name, finalScore) {
+    const title = getRankTitle(finalScore);
+    let history = JSON.parse(localStorage.getItem('specOpsScores') || '[]');
+    history.unshift({ name, score: finalScore, title: title });
+    history = history.slice(0, 5);
+    localStorage.setItem('specOpsScores', JSON.stringify(history));
+    renderScores();
+    return title;
+}
+
+function renderScores() {
+    const history = JSON.parse(localStorage.getItem('specOpsScores') || '[]');
+    const html = history.map(s => `
+        <div class="score-row">
+            <span>${s.name}</span>
+            <span style="color:#ffcc00;">[${s.title}]</span>
+            <span>${s.score}</span>
+        </div>`).join('');
+    const container1 = document.getElementById('start-scores');
+    const container2 = document.getElementById('end-scores');
+    if(container1) container1.innerHTML = html || "NO INTEL FOUND";
+    if(container2) container2.innerHTML = html || "NO INTEL FOUND";
+}
+
+// --- Audio & Game Logic ---
 function playSound(type) {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.frequency.setValueAtTime(type === 'fire' ? 800 : 150, audioCtx.currentTime);
-    gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
     osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 }
 
@@ -90,6 +139,7 @@ function preload() {
 }
 
 function create() {
+    renderScores();
     this.add.tileSprite(0,0,5000,5000,'grid').setOrigin(0);
     player = this.physics.add.sprite(window.innerWidth/2, window.innerHeight/2, 'p').setVisible(false);
     player.setDamping(true).setDrag(0.05).setMaxVelocity(400).setCollideWorldBounds(true);
@@ -100,7 +150,7 @@ function create() {
 
     joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setDepth(100);
     joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setDepth(101);
-    fireButton = this.add.image(window.innerWidth - 80, window.innerHeight - 100, 'fireBtn').setInteractive().setVisible(false).setDepth(100).setScrollFactor(0);
+    fireButton = this.add.image(window.innerWidth - 80, window.innerHeight - 100, 'fireBtn').setInteractive().setVisible(false).setDepth(100);
 
     this.input.addPointer(2);
     this.input.on('pointerdown', (pointer) => {
@@ -110,16 +160,10 @@ function create() {
             joystickThumb.setPosition(pointer.x, pointer.y).setVisible(true);
         }
     });
-
     fireButton.on('pointerdown', () => { isFiring = true; fireButton.setAlpha(0.8); });
     fireButton.on('pointerup', () => { isFiring = false; fireButton.setAlpha(1); });
 
-    this.input.on('pointerup', (pointer) => {
-        if (pointer.x < window.innerWidth / 2) {
-            joystickActive = false; joystickBase.setVisible(false); joystickThumb.setVisible(false);
-            player.setAcceleration(0);
-        }
-    });
+    this.input.on('pointerup', (p) => { if(p.x < window.innerWidth/2){ joystickActive = false; joystickBase.setVisible(false); joystickThumb.setVisible(false); player.setAcceleration(0); }});
 
     this.physics.add.overlap(bullets, enemies, (b, e) => { b.disableBody(true, true); e.destroy(); playSound('hit'); score += 100; document.getElementById('score-display').innerText = score.toString().padStart(5, '0'); if(score % 500 === 0) threatLevel++; });
     this.physics.add.collider(player, enemies, (p, e) => { e.destroy(); lives--; this.cameras.main.shake(200, 0.02); document.getElementById('lives-display').innerText = "❤️".repeat(lives) || "KIA"; if (lives <= 0) endGame(); });
@@ -128,15 +172,14 @@ function create() {
 
 function update(time) {
     if (!gameActive || this.physics.world.isPaused) return;
-
     if (joystickActive) {
-        let pointer = this.input.pointers.find(p => p.isDown && p.x < window.innerWidth / 2);
-        if (pointer) {
-            const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
-            const dist = Math.min(Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y), 50);
+        let p = this.input.pointers.find(p => p.isDown && p.x < window.innerWidth / 2);
+        if (p) {
+            const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, p.x, p.y);
+            const dist = Math.min(Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, p.x, p.y), 50);
             joystickThumb.setPosition(joystickBase.x + Math.cos(angle) * dist, joystickBase.y + Math.sin(angle) * dist);
             player.setAcceleration(Math.cos(angle) * 2000, Math.sin(angle) * 2000);
-            player.setRotation(angle); // Manually aim where moving
+            player.setRotation(angle);
         }
     } else {
         let ax = 0, ay = 0;
@@ -180,9 +223,12 @@ function togglePause() {
 
 function endGame() {
     gameActive = false; fireButton.setVisible(false);
+    const name = document.getElementById('id-display').innerText;
+    const finalTitle = saveScore(name, score);
     document.getElementById('hud').style.display = 'none';
+    document.getElementById('rank-title').innerText = `RANK: ${finalTitle}`;
+    document.getElementById('final-stats').innerText = `ID: ${name} | SCORE: ${score}`;
     document.getElementById('death-interface').style.display = 'flex';
-    document.getElementById('final-stats').innerText = `SCORE: ${score}`;
     phaserGame.scene.scenes[0].physics.world.pause();
 }
 </script>
