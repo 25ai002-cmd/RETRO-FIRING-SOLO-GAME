@@ -14,8 +14,8 @@
         }
         #hud {
             position: absolute; top: 20px; left: 20px; right: 20px;
-            color: #00ff41; pointer-events: none; z-index: 10; display: none;
-            display: flex; justify-content: space-between;
+            color: #00ff41; pointer-events: none; z-index: 10;
+            display: none; justify-content: space-between;
         }
         .pause-btn {
             pointer-events: auto; background: rgba(0, 255, 65, 0.2);
@@ -37,6 +37,14 @@
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
             background-size: 100% 4px; z-index: 200; pointer-events: none;
+        }
+        .history-container {
+            margin-top: 20px; padding: 10px; border-top: 1px solid #00ff41;
+            width: 80%; max-width: 300px; font-size: 14px;
+        }
+        .history-item {
+            display: flex; justify-content: space-between; margin: 5px 0;
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -65,6 +73,12 @@
         <h1 style="color: #ff4444;">MISSION FAILED</h1>
         <div id="rank-title" style="color:#ffcc00; margin-bottom: 10px;"></div>
         <p id="final-stats"></p>
+        
+        <div class="history-container">
+            <div style="margin-bottom: 10px; text-decoration: underline;">RECENT MISSIONS</div>
+            <div id="history-list"></div>
+        </div>
+
         <button class="btn" onclick="location.reload()">REDEPLOY</button>
     </div>
 
@@ -78,7 +92,13 @@ const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
-    physics: { default: 'arcade' },
+    physics: { 
+        default: 'arcade',
+        arcade: {
+            fps: 60,
+            forceLowPriority: true 
+        }
+    },
     scene: { preload, create, update }
 };
 
@@ -86,19 +106,26 @@ const phaserGame = new Phaser.Game(config);
 
 function playSound(type) {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); 
+    gain.connect(audioCtx.destination);
+    
+    const now = audioCtx.currentTime;
     if (type === 'fire') {
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
     } else {
         osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        osc.frequency.setValueAtTime(100, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now); osc.stop(now + 0.2);
     }
 }
 
@@ -115,7 +142,6 @@ function preload() {
     g.clear().fillStyle(0xffff00).fillRect(0, 0, 12, 3);
     g.generateTexture('b', 12, 3);
     
-    // Joystick & Fire Button textures
     g.clear().lineStyle(2, 0x00ff41, 0.4).strokeCircle(50, 50, 50);
     g.generateTexture('jBase', 100, 100);
     g.clear().fillStyle(0x00ff41, 0.4).fillCircle(25, 25, 25);
@@ -131,19 +157,16 @@ function create() {
     player.setDamping(true).setDrag(0.05).setMaxVelocity(400).setCollideWorldBounds(true);
     
     gun = this.add.image(0,0,'g').setOrigin(0, 0.5).setVisible(false);
-    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 500 });
+    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 50 });
     enemies = this.physics.add.group();
     keys = this.input.keyboard.addKeys('W,A,S,D');
 
-    // Controls UI
     joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setDepth(100);
     joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setDepth(101);
     
-    // Fire Button Positioning
     fireButton = this.add.image(window.innerWidth - 80, window.innerHeight - 80, 'fireBtn')
         .setInteractive().setVisible(false).setDepth(100).setScrollFactor(0);
 
-    // Multi-touch Logic
     this.input.addPointer(2);
 
     this.input.on('pointerdown', (pointer) => {
@@ -168,7 +191,9 @@ function create() {
     });
 
     this.physics.add.overlap(bullets, enemies, (b, e) => {
-        b.disableBody(true, true); e.destroy();
+        bullets.killAndHide(b);
+        b.body.stop();
+        e.destroy();
         playSound('hit');
         score += 100;
         document.getElementById('score-display').innerText = score.toString().padStart(5, '0');
@@ -187,7 +212,6 @@ function create() {
 function update(time) {
     if (!gameActive || this.physics.world.isPaused) return;
 
-    // Joystick Movement
     if (joystickActive) {
         let pointer = this.input.pointers.find(p => p.isDown && p.x < window.innerWidth / 2);
         if (pointer) {
@@ -204,7 +228,6 @@ function update(time) {
         player.setAcceleration(accelX, accelY);
     }
 
-    // Aiming Logic (Nearest Enemy)
     let nearest = this.physics.closest(player, enemies.getChildren());
     let targetAngle = player.rotation;
     if (nearest) {
@@ -213,7 +236,6 @@ function update(time) {
     }
     gun.setPosition(player.x, player.y).setRotation(targetAngle);
 
-    // Shooting (Infinite Ammo via Fire Button or Mouse Click)
     if ((isFiring || this.input.activePointer.leftButtonDown()) && time > (this.lastFired || 0)) {
         let b = bullets.get(player.x, player.y);
         if (b) {
@@ -226,7 +248,10 @@ function update(time) {
     }
 
     bullets.getChildren().forEach(b => {
-        if (b.active && (b.x<0 || b.x>window.innerWidth || b.y<0 || b.y>window.innerHeight)) b.disableBody(true,true);
+        if (b.active && (b.x < -50 || b.x > window.innerWidth + 50 || b.y < -50 || b.y > window.innerHeight + 50)) {
+            bullets.killAndHide(b);
+            b.body.stop();
+        }
     });
 
     if (enemies.countActive() < (5 + threatLevel)) {
@@ -237,7 +262,9 @@ function update(time) {
 }
 
 function startGame() {
-    document.getElementById('id-display').innerText = (document.getElementById('username').value || "OPERATIVE").toUpperCase();
+    const nameInput = document.getElementById('username').value.trim();
+    const name = (nameInput || "OPERATIVE").toUpperCase();
+    document.getElementById('id-display').innerText = name;
     gameActive = true;
     document.getElementById('start-interface').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
@@ -252,13 +279,28 @@ function togglePause() {
     document.getElementById('p-btn').innerText = isPaused ? "PAUSE" : "RESUME";
 }
 
+function updateScoreboard(newName, newScore) {
+    let history = JSON.parse(localStorage.getItem('specOpsScores') || '[]');
+    history.unshift({ name: newName, score: newScore });
+    if (history.length > 5) history = history.slice(0, 5);
+    localStorage.setItem('specOpsScores', JSON.stringify(history));
+    
+    const listElement = document.getElementById('history-list');
+    listElement.innerHTML = history.map(entry => 
+        `<div class="history-item"><span>${entry.name}</span> <span>${entry.score}</span></div>`
+    ).join('');
+}
+
 function endGame() {
     gameActive = false;
+    const name = document.getElementById('id-display').innerText;
     document.getElementById('hud').style.display = 'none';
     fireButton.setVisible(false);
     document.getElementById('death-interface').style.display = 'flex';
     document.getElementById('rank-title').innerText = score > 3000 ? "RANK: APEX" : "RANK: RECRUIT";
     document.getElementById('final-stats').innerText = `SCORE: ${score}`;
+    
+    updateScoreboard(name, score);
     phaserGame.scene.scenes[0].physics.world.pause();
 }
 </script>
