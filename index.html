@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spec-Ops: Mobile Elite</title>
+    <title>Spec-Ops: Manual Tactical</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; touch-action: none; }
@@ -19,20 +19,9 @@
         }
         .pause-btn {
             pointer-events: auto; background: rgba(0, 255, 65, 0.2);
-            border: 1px solid #00ff41; color: #00ff41; padding: 5px 15px;
-            cursor: pointer; font-family: 'Courier New', monospace;
+            border: 1px solid #00ff41; color: #00ff41; padding: 8px 15px;
+            cursor: pointer; font-family: 'Courier New', monospace; font-size: 14px;
         }
-        .input-group { margin: 15px 0; }
-        input[type="text"] {
-            background: rgba(0, 255, 65, 0.1); border: 2px solid #00ff41;
-            color: #00ff41; padding: 10px; font-family: 'Courier New', monospace;
-            font-size: 20px; text-align: center; outline: none; width: 200px;
-        }
-        .scoreboard {
-            margin-top: 10px; border: 1px solid rgba(0, 255, 65, 0.3);
-            padding: 10px; width: 90%; max-width: 400px; background: rgba(0, 20, 0, 0.5);
-        }
-        .score-row { display: flex; justify-content: space-between; font-size: 12px; margin: 4px 0; }
         .btn {
             background: none; border: 2px solid #00ff41; color: #00ff41;
             padding: 15px 30px; font-size: 20px; cursor: pointer;
@@ -50,28 +39,18 @@
     <div id="scanlines"></div>
 
     <div id="start-interface" class="overlay">
-        <h1 style="font-size: 24px;">SPEC-OPS: MOBILE</h1>
-        <div class="input-group">
-            <input type="text" id="username" placeholder="OPERATIVE ID" maxlength="12">
-        </div>
+        <h1>SPEC-OPS: MANUAL</h1>
+        <input type="text" id="username" placeholder="OPERATIVE ID" style="background:rgba(0,255,65,0.1); border:2px solid #00ff41; color:#00ff41; padding:10px; text-align:center;" maxlength="12">
         <button class="btn" onclick="startGame()">INITIALIZE</button>
-        <div class="scoreboard">
-            <div id="start-scores"></div>
-        </div>
     </div>
 
-    <div id="hud" style="display:none;">
-        <div>
-            ID: <span id="id-display"></span><br>
-            LIVES: <span id="lives-display">❤️❤️❤️</span><br>
-            INTEL: <span id="score-display">00000</span>
-        </div>
+    <div id="hud">
+        <div>ID: <span id="id-display"></span> | LIVES: <span id="lives-display">❤️❤️❤️</span> | INTEL: <span id="score-display">00000</span></div>
         <button class="pause-btn" id="p-btn" onclick="togglePause()">PAUSE</button>
     </div>
 
     <div id="death-interface" class="overlay" style="display: none;">
         <h1 style="color: #ff4444;">MISSION FAILED</h1>
-        <div id="rank-title" style="color:#ffcc00"></div>
         <p id="final-stats"></p>
         <button class="btn" onclick="location.reload()">REDEPLOY</button>
     </div>
@@ -80,69 +59,50 @@
 let gameActive = false, score = 0, lives = 3, threatLevel = 1;
 let player, gun, enemies, bullets, keys, audioCtx;
 let joystickBase, joystickThumb, joystickActive = false;
+let fireButton, isFiring = false;
 
 const config = {
-    type: Phaser.AUTO,
-    width: window.innerWidth,
-    height: window.innerHeight,
-    physics: { default: 'arcade' },
-    scene: { preload, create, update }
+    type: Phaser.AUTO, width: window.innerWidth, height: window.innerHeight,
+    physics: { default: 'arcade' }, scene: { preload, create, update }
 };
-
 const phaserGame = new Phaser.Game(config);
 
-// --- Sound Engine ---
 function playSound(type) {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain); gain.connect(audioCtx.destination);
-    if (type === 'fire') {
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-    } else {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
-    }
+    osc.frequency.setValueAtTime(type === 'fire' ? 800 : 150, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 }
 
 function preload() {
     let g = this.make.graphics({ x: 0, y: 0, add: false });
-    g.lineStyle(1, 0x00ff41, 0.2).strokeRect(0, 0, 64, 64);
-    g.generateTexture('grid', 64, 64);
-    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 20, 20);
-    g.generateTexture('p', 20, 20);
-    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 18, 6);
-    g.generateTexture('g', 18, 6);
-    g.clear().fillStyle(0xff4444).fillRect(0, 0, 22, 22);
-    g.generateTexture('e', 22, 22);
-    g.clear().fillStyle(0xffff00).fillRect(0, 0, 12, 3);
-    g.generateTexture('b', 12, 3);
-    // Joystick Graphics
-    g.clear().lineStyle(2, 0x00ff41, 0.5).strokeCircle(50, 50, 50);
-    g.generateTexture('jBase', 100, 100);
-    g.clear().fillStyle(0x00ff41, 0.5).fillCircle(25, 25, 25);
-    g.generateTexture('jThumb', 50, 50);
+    g.lineStyle(1, 0x00ff41, 0.2).strokeRect(0, 0, 64, 64); g.generateTexture('grid', 64, 64);
+    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 20, 20); g.generateTexture('p', 20, 20);
+    g.clear().fillStyle(0x00ff41).fillRect(0, 0, 18, 6); g.generateTexture('g', 18, 6);
+    g.clear().fillStyle(0xff4444).fillRect(0, 0, 22, 22); g.generateTexture('e', 22, 22);
+    g.clear().fillStyle(0xffff00).fillRect(0, 0, 12, 3); g.generateTexture('b', 12, 3);
+    g.clear().lineStyle(2, 0x00ff41, 0.4).strokeCircle(50, 50, 50); g.generateTexture('jBase', 100, 100);
+    g.clear().fillStyle(0x00ff41, 0.4).fillCircle(25, 25, 25); g.generateTexture('jThumb', 50, 50);
+    g.clear().lineStyle(3, 0x00ff41, 0.6).strokeCircle(40, 40, 40); g.fillStyle(0x00ff41, 0.2).fillCircle(40, 40, 40); g.generateTexture('fireBtn', 80, 80);
 }
 
 function create() {
     this.add.tileSprite(0,0,5000,5000,'grid').setOrigin(0);
     player = this.physics.add.sprite(window.innerWidth/2, window.innerHeight/2, 'p').setVisible(false);
     player.setDamping(true).setDrag(0.05).setMaxVelocity(400).setCollideWorldBounds(true);
-    
     gun = this.add.image(0,0,'g').setOrigin(0, 0.5).setVisible(false);
     bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 500 });
     enemies = this.physics.add.group();
     keys = this.input.keyboard.addKeys('W,A,S,D');
 
-    // Virtual Joystick UI
-    joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setScrollFactor(0).setDepth(100);
-    joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setScrollFactor(0).setDepth(101);
+    joystickBase = this.add.image(0, 0, 'jBase').setVisible(false).setDepth(100);
+    joystickThumb = this.add.image(0, 0, 'jThumb').setVisible(false).setDepth(101);
+    fireButton = this.add.image(window.innerWidth - 80, window.innerHeight - 100, 'fireBtn').setInteractive().setVisible(false).setDepth(100).setScrollFactor(0);
 
+    this.input.addPointer(2);
     this.input.on('pointerdown', (pointer) => {
         if (pointer.x < window.innerWidth / 2) {
             joystickActive = true;
@@ -151,80 +111,53 @@ function create() {
         }
     });
 
-    this.input.on('pointerup', () => {
-        joystickActive = false;
-        joystickBase.setVisible(false);
-        joystickThumb.setVisible(false);
-        player.setAcceleration(0);
+    fireButton.on('pointerdown', () => { isFiring = true; fireButton.setAlpha(0.8); });
+    fireButton.on('pointerup', () => { isFiring = false; fireButton.setAlpha(1); });
+
+    this.input.on('pointerup', (pointer) => {
+        if (pointer.x < window.innerWidth / 2) {
+            joystickActive = false; joystickBase.setVisible(false); joystickThumb.setVisible(false);
+            player.setAcceleration(0);
+        }
     });
 
-    this.physics.add.overlap(bullets, enemies, (b, e) => {
-        b.disableBody(true, true); e.destroy();
-        playSound('hit');
-        score += 100;
-        document.getElementById('score-display').innerText = score.toString().padStart(5, '0');
-        if(score % 500 === 0) threatLevel++;
-    });
-
-    this.physics.add.collider(player, enemies, (p, e) => {
-        e.destroy(); lives--;
-        this.cameras.main.shake(200, 0.02);
-        document.getElementById('lives-display').innerText = "❤️".repeat(lives) || "KIA";
-        if (lives <= 0) endGame();
-    });
+    this.physics.add.overlap(bullets, enemies, (b, e) => { b.disableBody(true, true); e.destroy(); playSound('hit'); score += 100; document.getElementById('score-display').innerText = score.toString().padStart(5, '0'); if(score % 500 === 0) threatLevel++; });
+    this.physics.add.collider(player, enemies, (p, e) => { e.destroy(); lives--; this.cameras.main.shake(200, 0.02); document.getElementById('lives-display').innerText = "❤️".repeat(lives) || "KIA"; if (lives <= 0) endGame(); });
     this.physics.world.pause();
 }
 
 function update(time) {
     if (!gameActive || this.physics.world.isPaused) return;
 
-    // Movement Logic (Keyboard + Joystick)
-    let accelX = 0, accelY = 0;
-    const speed = 2000;
-
     if (joystickActive) {
-        const pointer = this.input.activePointer;
-        const dist = Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
-        const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
-        const maxDist = 50;
-        const moveDist = Math.min(dist, maxDist);
-        joystickThumb.x = joystickBase.x + Math.cos(angle) * moveDist;
-        joystickThumb.y = joystickBase.y + Math.sin(angle) * moveDist;
-        accelX = Math.cos(angle) * speed;
-        accelY = Math.sin(angle) * speed;
+        let pointer = this.input.pointers.find(p => p.isDown && p.x < window.innerWidth / 2);
+        if (pointer) {
+            const angle = Phaser.Math.Angle.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y);
+            const dist = Math.min(Phaser.Math.Distance.Between(joystickBase.x, joystickBase.y, pointer.x, pointer.y), 50);
+            joystickThumb.setPosition(joystickBase.x + Math.cos(angle) * dist, joystickBase.y + Math.sin(angle) * dist);
+            player.setAcceleration(Math.cos(angle) * 2000, Math.sin(angle) * 2000);
+            player.setRotation(angle); // Manually aim where moving
+        }
     } else {
-        if (keys.W.isDown) accelY = -speed; else if (keys.S.isDown) accelY = speed;
-        if (keys.A.isDown) accelX = -speed; else if (keys.D.isDown) accelX = speed;
+        let ax = 0, ay = 0;
+        if (keys.W.isDown) ay = -2000; else if (keys.S.isDown) ay = 2000;
+        if (keys.A.isDown) ax = -2000; else if (keys.D.isDown) ax = 2000;
+        player.setAcceleration(ax, ay);
+        if (ax !== 0 || ay !== 0) player.setRotation(Math.atan2(ay, ax));
     }
-    player.setAcceleration(accelX, accelY);
+    gun.setPosition(player.x, player.y).setRotation(player.rotation);
 
-    // Aiming & Shooting
-    let targetAngle = Phaser.Math.Angle.Between(player.x, player.y, this.input.activePointer.x, this.input.activePointer.y);
-    
-    // Mobile Auto-Aim: If no pointer is active on right side, aim at nearest enemy
-    let nearest = this.physics.closest(player, enemies.getChildren());
-    if (nearest && (this.input.activePointer.x < window.innerWidth/2 || !this.input.activePointer.isDown)) {
-        targetAngle = Phaser.Math.Angle.Between(player.x, player.y, nearest.x, nearest.y);
-    }
-
-    player.setRotation(targetAngle);
-    gun.setPosition(player.x, player.y).setRotation(targetAngle);
-
-    if (this.input.activePointer.isDown && time > (this.lastFired || 0)) {
+    if ((isFiring || this.input.activePointer.leftButtonDown()) && time > (this.lastFired || 0)) {
         let b = bullets.get(player.x, player.y);
         if (b) {
             b.setActive(true).setVisible(true).body.reset(player.x, player.y);
-            b.setRotation(targetAngle);
-            this.physics.velocityFromRotation(targetAngle, 1800, b.body.velocity);
-            this.lastFired = time + 100;
-            playSound('fire');
+            b.setRotation(player.rotation);
+            this.physics.velocityFromRotation(player.rotation, 1800, b.body.velocity);
+            this.lastFired = time + 100; playSound('fire');
         }
     }
 
-    bullets.getChildren().forEach(b => {
-        if (b.active && (b.x<0 || b.x>window.innerWidth || b.y<0 || b.y>window.innerHeight)) b.disableBody(true,true);
-    });
-
+    bullets.getChildren().forEach(b => { if (b.active && (b.x<0 || b.x>window.innerWidth || b.y<0 || b.y>window.innerHeight)) b.disableBody(true,true); });
     if (enemies.countActive() < (5 + threatLevel)) {
         let x = Phaser.Math.Between(0, window.innerWidth), y = Phaser.Math.Between(0, window.innerHeight);
         if (Phaser.Math.Distance.Between(x, y, player.x, player.y) > 300) enemies.create(x, y, 'e');
@@ -234,25 +167,21 @@ function update(time) {
 
 function startGame() {
     document.getElementById('id-display').innerText = (document.getElementById('username').value || "OPERATIVE").toUpperCase();
-    gameActive = true;
-    document.getElementById('start-interface').style.display = 'none';
+    gameActive = true; document.getElementById('start-interface').style.display = 'none';
     document.getElementById('hud').style.display = 'flex';
-    player.setVisible(true); gun.setVisible(true);
+    player.setVisible(true); gun.setVisible(true); fireButton.setVisible(true);
     phaserGame.scene.scenes[0].physics.world.resume();
 }
 
 function togglePause() {
-    const scene = phaserGame.scene.scenes[0];
-    const isPaused = scene.physics.world.isPaused;
-    scene.physics.world.isPaused = !isPaused;
-    document.getElementById('p-btn').innerText = isPaused ? "PAUSE" : "RESUME";
+    phaserGame.scene.scenes[0].physics.world.isPaused = !phaserGame.scene.scenes[0].physics.world.isPaused;
+    document.getElementById('p-btn').innerText = phaserGame.scene.scenes[0].physics.world.isPaused ? "RESUME" : "PAUSE";
 }
 
 function endGame() {
-    gameActive = false;
+    gameActive = false; fireButton.setVisible(false);
     document.getElementById('hud').style.display = 'none';
     document.getElementById('death-interface').style.display = 'flex';
-    document.getElementById('rank-title').innerText = score > 3000 ? "RANK: APEX" : "RANK: RECRUIT";
     document.getElementById('final-stats').innerText = `SCORE: ${score}`;
     phaserGame.scene.scenes[0].physics.world.pause();
 }
