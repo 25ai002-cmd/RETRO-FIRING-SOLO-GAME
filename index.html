@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Spec-Ops: Tactical Titles</title>
+    <title>Spec-Ops: Tactical Titles - Infinite Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; cursor: crosshair; }
@@ -86,7 +86,7 @@ const phaserConfig = {
 const phaserGame = new Phaser.Game(phaserConfig);
 let player, gun, enemies, bullets, keys;
 
-// --- Title Logic ---
+// --- Rank Logic ---
 function getRankTitle(s) {
     if (s >= 5000) return "APEX PREDATOR";
     if (s >= 3000) return "KING OF ACCURACY";
@@ -96,7 +96,7 @@ function getRankTitle(s) {
     return "GREEN RECRUIT";
 }
 
-// --- Scoreboard Logic ---
+// --- Scoreboard Persistence ---
 function saveScore(name, finalScore) {
     const title = getRankTitle(finalScore);
     let history = JSON.parse(localStorage.getItem('specOpsScores') || '[]');
@@ -139,19 +139,25 @@ function create() {
     player = this.physics.add.sprite(window.innerWidth/2, window.innerHeight/2, 'p').setVisible(false);
     player.setCollideWorldBounds(true);
     gun = this.add.image(0,0,'g').setOrigin(0, 0.5).setVisible(false);
-    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 60 });
+    
+    // INFINITE AMMO: Huge pool size of 500 bullets
+    bullets = this.physics.add.group({ defaultKey: 'b', maxSize: 500 });
+    
     enemies = this.physics.add.group();
     keys = this.input.keyboard.addKeys('W,A,S,D,P');
 
     this.physics.add.overlap(bullets, enemies, (b, e) => {
-        b.disableBody(true, true); e.destroy();
+        // Bullet is recycled immediately upon impact
+        b.disableBody(true, true); 
+        e.destroy();
         score += 100;
         document.getElementById('score-display').innerText = score.toString().padStart(5, '0');
         if(score % 500 === 0) threatLevel++;
     });
 
     this.physics.add.collider(player, enemies, (p, e) => {
-        e.destroy(); lives--;
+        e.destroy(); 
+        lives--;
         document.getElementById('lives-display').innerText = "❤️".repeat(lives) || "KIA";
         if (lives <= 0) endGame();
     });
@@ -171,20 +177,25 @@ function update(time) {
     player.setRotation(angle);
     gun.setPosition(player.x, player.y).setRotation(angle);
 
-    if (this.input.activePointer.isDown && this.input.activePointer.button === 0 && time > (this.lastFired || 0)) {
+    // RAPID FIRE INFINITE AMMO
+    if (this.input.activePointer.isDown && time > (this.lastFired || 0)) {
         let b = bullets.get(player.x, player.y);
         if (b) {
             b.setActive(true).setVisible(true).body.reset(player.x, player.y);
             b.setRotation(angle);
-            this.physics.velocityFromRotation(angle, 1900, b.body.velocity);
-            this.lastFired = time + 90;
+            this.physics.velocityFromRotation(angle, 2000, b.body.velocity);
+            this.lastFired = time + 75; // Fast firing delay
         }
     }
 
+    // AUTO-RECYCLE: Returns bullets to pool when they leave screen
     bullets.getChildren().forEach(b => {
-        if (b.active && (b.x<0 || b.x>window.innerWidth || b.y<0 || b.y>window.innerHeight)) b.disableBody(true,true);
+        if (b.active && (b.x < 0 || b.x > window.innerWidth || b.y < 0 || b.y > window.innerHeight)) {
+            b.disableBody(true, true);
+        }
     });
 
+    // Enemy Spawning
     if (enemies.countActive() < (6 + threatLevel)) {
         let x = Phaser.Math.Between(0, window.innerWidth), y = Phaser.Math.Between(0, window.innerHeight);
         if (Phaser.Math.Distance.Between(x, y, player.x, player.y) > 400) enemies.create(x, y, 'e');
